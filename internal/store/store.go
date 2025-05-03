@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"encoding/json"
@@ -13,6 +13,12 @@ type Store struct {
 	mu   sync.RWMutex
 }
 
+func New() Store {
+	return Store{
+		data: make(map[string]string),
+	}
+}
+
 // WriteRequest represents the structure of our write request
 type WriteRequest struct {
 	Key   string `json:"key"`
@@ -25,7 +31,7 @@ type WriteResponse struct {
 	Message string `json:"message"`
 }
 
-func (s *Store) handleSet(w http.ResponseWriter, r *http.Request) {
+func (s *Store) HandleSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -68,7 +74,7 @@ type ReadResponse struct {
 	Value string `json:"value"`
 }
 
-func (s *Store) handleGet(w http.ResponseWriter, r *http.Request) {
+func (s *Store) HandleGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
