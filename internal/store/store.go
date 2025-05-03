@@ -1,9 +1,7 @@
 package store
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync"
 )
 
@@ -13,92 +11,38 @@ type Store struct {
 	mu   sync.RWMutex
 }
 
-func New() Store {
-	return Store{
+// New creates a new Store instance
+func New() *Store {
+	return &Store{
 		data: make(map[string]string),
 	}
 }
 
-// WriteRequest represents the structure of our write request
-type WriteRequest struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-// WriteResponse represents the response structure
-type WriteResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
-func (s *Store) HandleSet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req WriteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Key == "" {
-		http.Error(w, "Key cannot be empty", http.StatusBadRequest)
-		return
-	}
-
-	if req.Value == "" {
-		http.Error(w, "Value cannot be empty", http.StatusBadRequest)
+// Set stores a value for a given key
+func (s *Store) Set(key, value string) error {
+	if key == "" {
+		return fmt.Errorf("key cannot be empty")
 	}
 
 	s.mu.Lock()
-	s.data[req.Key] = req.Value
+	s.data[key] = value
 	s.mu.Unlock()
-
-	response := WriteResponse{
-		Success: true,
-		Message: fmt.Sprintf("wrote value for %s=%s", req.Key, req.Value),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	return nil
 }
 
-type ReadRequest struct {
-	Key string `json:"key"`
-}
-
-type ReadResponse struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-func (s *Store) HandleGet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// Get retrieves a value for a given key
+func (s *Store) Get(key string) (string, error) {
+	if key == "" {
+		return "", fmt.Errorf("key cannot be empty")
 	}
 
-	var req ReadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+	s.mu.RLock()
+	value, exists := s.data[key]
+	s.mu.RUnlock()
+
+	if !exists {
+		return "", fmt.Errorf("key not found: %s", key)
 	}
 
-	if req.Key == "" {
-		http.Error(w, "Key cannot be empty", http.StatusBadRequest)
-		return
-	}
-
-	s.mu.Lock()
-	value := s.data[req.Key]
-	s.mu.Unlock()
-
-	resp := ReadResponse{
-		Key:   req.Key,
-		Value: value,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	return value, nil
 }
