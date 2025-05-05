@@ -9,7 +9,7 @@ import (
 
 // ChainTable represents a table of chain data
 type ChainTable struct {
-	Nodes []Node `yaml:"chains"`
+	Nodes []Node `yaml:"nodes"`
 }
 
 // Node represents a single chain entry
@@ -42,18 +42,22 @@ const (
 	MIDDLE
 	// represent the tail node
 	TAIL
+
+	Unknown
 )
 
 // get the role of the node given the node id
 func (ct *ChainTable) Role(id int) Role {
 	size := len(ct.Nodes)
+	fmt.Println(ct.Nodes)
 	if id == 0 {
 		return HEAD
+	} else if id < size-1 {
+		return MIDDLE
 	} else if id == size-1 {
 		return TAIL
-	} else {
-		return MIDDLE
 	}
+	return Unknown
 }
 
 // String returns a YAML string representation of the ChainTable

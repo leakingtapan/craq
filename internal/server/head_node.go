@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -58,13 +59,19 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 
 	if req.Value == "" {
 		http.Error(w, "Value cannot be empty", http.StatusBadRequest)
+		return
 	}
 
+	log.Printf("handle set %s=%s", req.Key, req.Value)
 	node.store.Set(req.Key, req.Value)
 
-	// TODO:
 	// propagate write
 	// wait for the write to be committed
+	err := node.propagateWrite(req.Key, req.Value)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to write %s=%s", req.Key, req.Value), http.StatusInternalServerError)
+		return
+	}
 
 	response := WriteResponse{
 		Success: true,
@@ -73,6 +80,49 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func propagateWrite(addr string, key, value string) error {
+	log.Printf("propagate write to %s for %s=%s", addr, key, value)
+	url := fmt.Sprintf("http://%s/propagate", addr)
+
+	propagateReq := PropagateWriteRequest{
+		Key:   key,
+		Value: value,
+	}
+
+	data, err := json.Marshal(propagateReq)
+	if err != nil {
+		return fmt.Errorf("failed to marchal propagate request: %w", err)
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("propagation failed: %w", err)
+	}
+
+	var propagateResp PropagateWriteResponse
+
+	if err := json.NewDecoder(resp.Body).Decode(&propagateResp); err != nil {
+		return fmt.Errorf("failed to unmarchal the response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("failed to propagate write %v", propagateResp)
+		return fmt.Errorf("propagation failed status: %v", resp.StatusCode)
+	}
+
+	if propagateResp.Status != "ok" {
+		return fmt.Errorf("propagation failed response: %v", propagateResp.Status)
+	}
+
+	return nil
+}
+
+func (node *HeadNode) propagateWrite(key, value string) error {
+	nextId := node.Id + 1
+	nextNode := node.chainTable.Nodes[nextId]
+	return propagateWrite(nextNode.Addr, key, value)
 }
 
 type ReadRequest struct {

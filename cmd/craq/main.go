@@ -52,7 +52,7 @@ func startServer() error {
 		http.HandleFunc("/get", svr.HandleGet)
 	case server.MIDDLE:
 		log.Printf("creating middle node")
-		svr := server.NewMiddleNode()
+		svr := server.NewMiddleNode(id, chainTable)
 		http.HandleFunc("/get", svr.HandleGet)
 		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
 	case server.TAIL:
@@ -61,6 +61,8 @@ func startServer() error {
 		http.HandleFunc("/get", svr.HandleGet)
 		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
 		http.HandleFunc("/version", svr.HandleVersionQuery)
+	case server.Unknown:
+		log.Fatal("failed to create server, unknown node role")
 	}
 
 	addr := fmt.Sprintf(":%d", port)
