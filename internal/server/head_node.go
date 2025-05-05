@@ -9,7 +9,7 @@ import (
 	"github.com/leakingtapan/craq/internal/store"
 )
 
-type Server struct {
+type HeadNode struct {
 	// the server ID is the node ID within the chain
 	Id int
 
@@ -19,8 +19,8 @@ type Server struct {
 }
 
 // create a new server
-func New(id int, chainTable *ChainTable) Server {
-	return Server{
+func NewHeadNode(id int, chainTable *ChainTable) HeadNode {
+	return HeadNode{
 		Id:         id,
 		chainTable: chainTable,
 		store:      store.New(),
@@ -39,7 +39,7 @@ type WriteResponse struct {
 	Message string `json:"message"`
 }
 
-func (svr *Server) HandleSet(w http.ResponseWriter, r *http.Request) {
+func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -60,7 +60,11 @@ func (svr *Server) HandleSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Value cannot be empty", http.StatusBadRequest)
 	}
 
-	svr.store.Set(req.Key, req.Value)
+	node.store.Set(req.Key, req.Value)
+
+	// TODO:
+	// propagate write
+	// wait for the write to be committed
 
 	response := WriteResponse{
 		Success: true,
@@ -80,7 +84,7 @@ type ReadResponse struct {
 	Value string `json:"value"`
 }
 
-func (svr *Server) HandleGet(w http.ResponseWriter, r *http.Request) {
+func (svr *HeadNode) HandleGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}

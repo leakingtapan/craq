@@ -33,6 +33,29 @@ func ParseChainTable(filePath string) (*ChainTable, error) {
 	return table, nil
 }
 
+type Role int
+
+const (
+	// represent the head node
+	HEAD Role = iota
+	// represent any of the middle node
+	MIDDLE
+	// represent the tail node
+	TAIL
+)
+
+// get the role of the node given the node id
+func (ct *ChainTable) Role(id int) Role {
+	size := len(ct.Nodes)
+	if id == 0 {
+		return HEAD
+	} else if id == size-1 {
+		return TAIL
+	} else {
+		return MIDDLE
+	}
+}
+
 // String returns a YAML string representation of the ChainTable
 func (ct *ChainTable) String() string {
 	data, err := yaml.Marshal(ct)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 
@@ -41,13 +42,29 @@ func startServer() error {
 	if err != nil {
 		return err
 	}
-	svr := server.New(id, chainTable)
 
-	http.HandleFunc("/set", svr.HandleSet)
-	http.HandleFunc("/get", svr.HandleGet)
+	role := chainTable.Role(id)
+	switch role {
+	case server.HEAD:
+		log.Printf("creating head node")
+		svr := server.NewHeadNode(id, chainTable)
+		http.HandleFunc("/set", svr.HandleSet)
+		http.HandleFunc("/get", svr.HandleGet)
+	case server.MIDDLE:
+		log.Printf("creating middle node")
+		svr := server.NewMiddleNode()
+		http.HandleFunc("/get", svr.HandleGet)
+		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
+	case server.TAIL:
+		log.Printf("creating tail node")
+		svr := server.NewTailNode()
+		http.HandleFunc("/get", svr.HandleGet)
+		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
+		http.HandleFunc("/version", svr.HandleVersionQuery)
+	}
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("Server starting on %s...\n", addr)
+	log.Printf("Server starting on %s...\n", addr)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		return err
 	}
