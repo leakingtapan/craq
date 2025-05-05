@@ -4,17 +4,26 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/leakingtapan/craq/internal/store"
 )
 
 type TailNode struct {
+	Id         int
+	chainTable *ChainTable
+	store      *store.Store
 }
 
-func NewTailNode() *TailNode {
-	return &TailNode{}
+func NewTailNode(id int, chainTable *ChainTable) *TailNode {
+	return &TailNode{
+		Id:         id,
+		chainTable: chainTable,
+		store:      store.New(),
+	}
 }
 
 func (node *TailNode) HandleGet(w http.ResponseWriter, r *http.Request) {
-
+	handlGet(node.store, w, r)
 }
 
 func (node *TailNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +32,8 @@ func (node *TailNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	node.store.Set(req.Key, req.Value)
 
 	log.Printf("commit write %s=%s", req.Key, req.Value)
 	err := node.commitWrite()

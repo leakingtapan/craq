@@ -57,7 +57,7 @@ func startServer() error {
 		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
 	case server.TAIL:
 		log.Printf("creating tail node")
-		svr := server.NewTailNode()
+		svr := server.NewTailNode(id, chainTable)
 		http.HandleFunc("/get", svr.HandleGet)
 		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
 		http.HandleFunc("/version", svr.HandleVersionQuery)

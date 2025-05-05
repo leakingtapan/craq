@@ -134,7 +134,11 @@ type ReadResponse struct {
 	Value string `json:"value"`
 }
 
-func (svr *HeadNode) HandleGet(w http.ResponseWriter, r *http.Request) {
+func (node *HeadNode) HandleGet(w http.ResponseWriter, r *http.Request) {
+	handlGet(node.store, w, r)
+}
+
+func handlGet(store *store.Store, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -150,7 +154,8 @@ func (svr *HeadNode) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	value, err := svr.store.Get(req.Key)
+	log.Printf("handle get for %s", req.Key)
+	value, err := store.Get(req.Key)
 	if err != nil {
 		log.Printf("failed to get key %s: %v", req.Key, err)
 		http.Error(w, fmt.Sprintf("failed to get key %s from store", req.Key), http.StatusInternalServerError)

@@ -5,22 +5,26 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"github.com/leakingtapan/craq/internal/store"
 )
 
 type MiddleNode struct {
 	Id         int
 	chainTable *ChainTable
+	store      *store.Store
 }
 
 func NewMiddleNode(id int, chainTable *ChainTable) *MiddleNode {
 	return &MiddleNode{
 		Id:         id,
 		chainTable: chainTable,
+		store:      store.New(),
 	}
 }
 
 func (node *MiddleNode) HandleGet(w http.ResponseWriter, r *http.Request) {
-
+	handlGet(node.store, w, r)
 }
 
 type PropagateWriteRequest struct {
@@ -38,6 +42,8 @@ func (node *MiddleNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	node.store.Set(req.Key, req.Value)
 
 	log.Printf("handle propagate write %s=%s", req.Key, req.Value)
 	// propagate write
