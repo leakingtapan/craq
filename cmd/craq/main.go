@@ -42,6 +42,7 @@ func startServer() error {
 	if err != nil {
 		return err
 	}
+	log.Printf("parsed chain table: %+v\n", chainTable)
 
 	role := chainTable.Role(id)
 	switch role {

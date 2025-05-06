@@ -63,11 +63,15 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("handle set %s=%s", req.Key, req.Value)
-	node.store.Set(req.Key, req.Value)
+	err := node.store.Set(req.Key, req.Value)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
+		return
+	}
 
 	// propagate write
 	// wait for the write to be committed
-	err := node.propagateWrite(req.Key, req.Value)
+	err = node.propagateWrite(req.Key, req.Value)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to write %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 		return
@@ -154,19 +158,26 @@ func handlGet(store *store.Store, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("handle get for %s", req.Key)
-	value, err := store.Get(req.Key)
+	log.Printf("handle get key=%s", req.Key)
+	object, err := store.Get(req.Key)
 	if err != nil {
 		log.Printf("failed to get key %s: %v", req.Key, err)
 		http.Error(w, fmt.Sprintf("failed to get key %s from store", req.Key), http.StatusInternalServerError)
 		return
 	}
 
-	resp := ReadResponse{
-		Key:   req.Key,
-		Value: value,
+	if !object.IsDirty() {
+		resp := ReadResponse{
+			Key:   req.Key,
+			Value: object.Values[0].Value,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	// TODO:
+	// if the object is dirty, do the version query against the tail
+	// and look up the value for that version from local store
 }

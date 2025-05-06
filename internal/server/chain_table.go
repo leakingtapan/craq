@@ -49,7 +49,6 @@ const (
 // get the role of the node given the node id
 func (ct *ChainTable) Role(id int) Role {
 	size := len(ct.Nodes)
-	fmt.Println(ct.Nodes)
 	if id == 0 {
 		return HEAD
 	} else if id < size-1 {
