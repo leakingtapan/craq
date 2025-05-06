@@ -22,6 +22,10 @@ func (o *Object) IsDirty() bool {
 	return len(o.Values) > 1
 }
 
+func (o *Object) Commit() {
+	o.Values = o.Values[len(o.Values)-1:]
+}
+
 func (o *Object) String() string {
 	bytes, _ := json.Marshal(o)
 	return string(bytes)
@@ -41,9 +45,9 @@ func New() *Store {
 }
 
 // Set stores a value for a given key
-func (s *Store) Set(key, value string) error {
+func (s *Store) Set(key, value string) (*Object, error) {
 	if key == "" {
-		return fmt.Errorf("key cannot be empty")
+		return nil, fmt.Errorf("key cannot be empty")
 	}
 
 	s.mu.Lock()
@@ -71,7 +75,7 @@ func (s *Store) Set(key, value string) error {
 		})
 	}
 
-	return nil
+	return object, nil
 }
 
 // Get retrieves a value for a given key
@@ -87,6 +91,8 @@ func (s *Store) Get(key string) (*Object, error) {
 	if !exists {
 		return nil, fmt.Errorf("key not found: %s", key)
 	}
+
+	fmt.Println(object)
 
 	return object, nil
 }

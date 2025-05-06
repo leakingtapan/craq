@@ -43,16 +43,22 @@ func (node *MiddleNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	node.store.Set(req.Key, req.Value)
+	object, err := node.store.Set(req.Key, req.Value)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
+	}
 
 	log.Printf("handle propagate write %s=%s", req.Key, req.Value)
 	// propagate write
 	// wait for the write to be committed
-	err := node.propagateWrite(req.Key, req.Value)
+	err = node.propagateWrite(req.Key, req.Value)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
 		return
 	}
+
+	// mark the object as clean (commited) after the propagate is done
+	object.Commit()
 
 	resp := PropagateWriteResponse{
 		Status: "ok",

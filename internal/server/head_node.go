@@ -63,7 +63,7 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("handle set %s=%s", req.Key, req.Value)
-	err := node.store.Set(req.Key, req.Value)
+	object, err := node.store.Set(req.Key, req.Value)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 		return
@@ -76,6 +76,9 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to write %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 		return
 	}
+
+	// mark the object as clean (commited) after the propagate is done
+	object.Commit()
 
 	response := WriteResponse{
 		Success: true,

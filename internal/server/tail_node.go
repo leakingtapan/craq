@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -33,10 +34,13 @@ func (node *TailNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	node.store.Set(req.Key, req.Value)
+	object, err := node.store.Set(req.Key, req.Value)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
+	}
 
 	log.Printf("commit write %s=%s", req.Key, req.Value)
-	err := node.commitWrite()
+	err = node.commitWrite(object)
 	if err != nil {
 		http.Error(w, "failed to commit write", http.StatusInternalServerError)
 	}
@@ -48,7 +52,8 @@ func (node *TailNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(&resp)
 }
 
-func (node *TailNode) commitWrite() error {
+func (node *TailNode) commitWrite(object *store.Object) error {
+	object.Commit()
 	return nil
 }
 
