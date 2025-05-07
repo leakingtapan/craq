@@ -1,21 +1,26 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/leakingtapan/craq/internal/server"
 	"github.com/spf13/cobra"
 )
 
 var (
-	port int
-	id   int
-	//
+	port           int
+	id             int
 	chainTablePath string
-	rootCmd        = &cobra.Command{
+
+	rootCmd = &cobra.Command{
 		Use:   "craq",
 		Short: "CRAQ - A key-value server the implement CRAQ",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,38 +43,93 @@ func main() {
 }
 
 func startServer() error {
-	chainTable, err := server.ParseChainTable(chainTablePath)
+	fmt.Println("1")
+	server, err := configureServer()
 	if err != nil {
 		return err
 	}
-	log.Printf("parsed chain table: %+v\n", chainTable)
 
-	role := chainTable.Role(id)
-	switch role {
+	// Channel to listen for errors coming from the listener.
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		log.Printf("Starting server with ID %d on %s...\n", id, server.Addr)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case err := <-serverErrors:
+		log.Fatalf("Error starting servr: %v", err)
+	case sig := <-shutdown:
+		log.Printf("Got signal: %v", sig)
+		log.Printf("server is shutting down...")
+
+		// Give outstanding requests 5 seconds to complete.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("Graceful shutdown did not complete in 5s: %v", err)
+			if err := server.Close(); err != nil {
+				log.Fatalf("Could not stop server: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func configureServer() (*http.Server, error) {
+	svr := &http.Server{
+		Addr: fmt.Sprintf(":%d", port),
+	}
+
+	chainTable, err := server.ParseChainTable(chainTablePath)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("parsed chain table: \n%+v", chainTable)
+
+	currDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	nodeFilePath := filepath.Join(currDir, "states", fmt.Sprintf("%d", id))
+
+	switch chainTable.Role(id) {
 	case server.HEAD:
 		log.Printf("creating head node")
-		svr := server.NewHeadNode(id, chainTable)
-		http.HandleFunc("/set", svr.HandleSet)
-		http.HandleFunc("/get", svr.HandleGet)
+		handler, err := server.NewHeadNode(id, chainTable, nodeFilePath)
+		if err != nil {
+			return nil, err
+		}
+		http.HandleFunc("/set", handler.HandleSet)
+		http.HandleFunc("/get", handler.HandleGet)
 	case server.MIDDLE:
 		log.Printf("creating middle node")
-		svr := server.NewMiddleNode(id, chainTable)
-		http.HandleFunc("/get", svr.HandleGet)
-		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
+		handler, err := server.NewMiddleNode(id, chainTable, nodeFilePath)
+		if err != nil {
+			return nil, err
+		}
+		http.HandleFunc("/get", handler.HandleGet)
+		http.HandleFunc("/propagate", handler.HandlePropagateWrite)
 	case server.TAIL:
 		log.Printf("creating tail node")
-		svr := server.NewTailNode(id, chainTable)
-		http.HandleFunc("/get", svr.HandleGet)
-		http.HandleFunc("/propagate", svr.HandlePropagateWrite)
-		http.HandleFunc("/version", svr.HandleVersionQuery)
+		handler, err := server.NewTailNode(id, chainTable, nodeFilePath)
+		if err != nil {
+			return nil, err
+		}
+
+		http.HandleFunc("/get", handler.HandleGet)
+		http.HandleFunc("/propagate", handler.HandlePropagateWrite)
+		http.HandleFunc("/version", handler.HandleVersionQuery)
 	case server.Unknown:
 		log.Fatal("failed to create server, unknown node role")
 	}
 
-	addr := fmt.Sprintf(":%d", port)
-	log.Printf("Server starting on %s...\n", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		return err
-	}
-	return nil
+	return svr, nil
 }

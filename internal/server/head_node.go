@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/leakingtapan/craq/internal/store"
 )
@@ -20,12 +21,17 @@ type HeadNode struct {
 }
 
 // create a new server
-func NewHeadNode(id int, chainTable *ChainTable) HeadNode {
-	return HeadNode{
+func NewHeadNode(id int, chainTable *ChainTable, nodeFilePath string) (*HeadNode, error) {
+	store, err := store.New(filepath.Join(nodeFilePath, "wal"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &HeadNode{
 		Id:         id,
 		chainTable: chainTable,
-		store:      store.New(),
-	}
+		store:      store,
+	}, nil
 }
 
 // WriteRequest represents the structure of our write request

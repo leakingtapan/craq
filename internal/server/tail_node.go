@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/leakingtapan/craq/internal/store"
 )
@@ -15,12 +16,21 @@ type TailNode struct {
 	store      *store.Store
 }
 
-func NewTailNode(id int, chainTable *ChainTable) *TailNode {
+func NewTailNode(
+	id int,
+	chainTable *ChainTable,
+	nodeFilePath string,
+) (*TailNode, error) {
+	store, err := store.New(filepath.Join(nodeFilePath, "wal"))
+	if err != nil {
+		return nil, err
+	}
+
 	return &TailNode{
 		Id:         id,
 		chainTable: chainTable,
-		store:      store.New(),
-	}
+		store:      store,
+	}, nil
 }
 
 func (node *TailNode) HandleGet(w http.ResponseWriter, r *http.Request) {

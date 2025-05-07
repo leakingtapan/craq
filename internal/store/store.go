@@ -35,13 +35,29 @@ func (o *Object) String() string {
 type Store struct {
 	data map[string]*Object
 	mu   sync.RWMutex
+
+	wal *WAL
 }
 
 // New creates a new Store instance
-func New() *Store {
-	return &Store{
+func New(walDir string) (*Store, error) {
+	store := &Store{
 		data: make(map[string]*Object),
 	}
+
+	wal, err := NewWAL(walDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create WAL: %w", err)
+	}
+	if err := wal.Recover(store); err != nil {
+		return nil, fmt.Errorf("failed to recover from WAL: %w", err)
+	}
+
+	// only set the wal after recover is done to avoid
+	// writing new WAL entry during recovery
+	store.wal = wal
+
+	return store, nil
 }
 
 // Set stores a value for a given key
@@ -60,20 +76,36 @@ func (s *Store) Set(key, value string) (*Object, error) {
 	}
 
 	object := s.data[key]
+	var version int64
 	if len(object.Values) == 0 {
-		object.Values = append(object.Values, Value{
-			Value:     value,
-			Version:   0, // the version is zero indexed
-			Timestamp: time.Now(),
-		})
+		version = 0
 	} else {
-		currVersion := object.Values[len(object.Values)-1].Version
-		object.Values = append(object.Values, Value{
-			Value:     value,
-			Version:   currVersion + 1,
-			Timestamp: time.Now(),
-		})
+		version = object.Values[len(object.Values)-1].Version + 1
 	}
+
+	// Create new value
+	newValue := Value{
+		Value:     value,
+		Version:   version,
+		Timestamp: time.Now(),
+	}
+
+	// wal will be nil during recover
+	if s.wal != nil {
+		// Write to WAL first
+		if err := s.wal.Write(WALEntry{
+			Ops:       "SET",
+			Key:       key,
+			Value:     value,
+			Version:   version,
+			Timestamp: newValue.Timestamp,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to write to WAL: %w", err)
+		}
+	}
+
+	// Then apply to memory
+	object.Values = append(object.Values, newValue)
 
 	return object, nil
 }

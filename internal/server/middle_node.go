@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/leakingtapan/craq/internal/store"
 )
@@ -15,12 +16,21 @@ type MiddleNode struct {
 	store      *store.Store
 }
 
-func NewMiddleNode(id int, chainTable *ChainTable) *MiddleNode {
+func NewMiddleNode(
+	id int,
+	chainTable *ChainTable,
+	nodeFilePath string,
+) (*MiddleNode, error) {
+	store, err := store.New(filepath.Join(nodeFilePath, "wal"))
+	if err != nil {
+		return nil, err
+	}
+
 	return &MiddleNode{
 		Id:         id,
 		chainTable: chainTable,
-		store:      store.New(),
-	}
+		store:      store,
+	}, nil
 }
 
 func (node *MiddleNode) HandleGet(w http.ResponseWriter, r *http.Request) {
