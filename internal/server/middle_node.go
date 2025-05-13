@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/leakingtapan/craq/internal/store"
 )
@@ -38,8 +39,10 @@ func (node *MiddleNode) HandleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type PropagateWriteRequest struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key       string    `json:"key"`
+	Value     string    `json:"value"`
+	Version   int64     `json:"version"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type PropagateWriteResponse struct {
@@ -53,15 +56,20 @@ func (node *MiddleNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	object, err := node.store.Set(req.Key, req.Value)
+	object, err := node.store.Set(req.Key, req.Value, req.Version)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 	}
 
-	log.Printf("handle propagate write %s=%s", req.Key, req.Value)
+	log.Printf("handle propagate write %s=%s (v=%d)", req.Key, req.Value, req.Version)
+
 	// propagate write
 	// wait for the write to be committed
-	err = node.propagateWrite(req.Key, req.Value)
+	err = node.propagateWrite(req.Key, &store.Value{
+		Value:     req.Value,
+		Version:   req.Version,
+		Timestamp: req.Timestamp,
+	})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
 		return
@@ -78,7 +86,7 @@ func (node *MiddleNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (node *MiddleNode) propagateWrite(key, value string) error {
+func (node *MiddleNode) propagateWrite(key string, value *store.Value) error {
 	nextId := node.Id + 1
 	nextNode := node.chainTable.Nodes[nextId]
 	return propagateWrite(nextNode.Addr, key, value)

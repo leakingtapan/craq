@@ -87,7 +87,7 @@ func (w *WAL) Recover(store *Store) error {
 		// Apply the operation to the store
 		switch entry.Ops {
 		case "SET":
-			object, err := store.Set(entry.Key, entry.Value)
+			object, err := store.Set(entry.Key, entry.Value, entry.Version)
 			if err != nil {
 				return fmt.Errorf("failed to apply SET operation: %w", err)
 			}

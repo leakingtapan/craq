@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -68,8 +69,22 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("handle set %s=%s", req.Key, req.Value)
-	object, err := node.store.Set(req.Key, req.Value)
+	var version int64
+	object, err := node.store.Get(req.Key)
+	if err != nil {
+		if errors.Is(err, store.ErrObjectNonExists) {
+			version = 0
+		} else {
+			http.Error(w, "failed to get object", http.StatusBadRequest)
+			return
+		}
+	} else {
+		version = object.NextVersion()
+	}
+	log.Printf("get latest version for %s (v=%d)", req.Key, version)
+
+	log.Printf("handle set %s=%s (v=%d)", req.Key, req.Value, version)
+	object, err = node.store.Set(req.Key, req.Value, version)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 		return
@@ -77,7 +92,7 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 
 	// propagate write
 	// wait for the write to be committed
-	err = node.propagateWrite(req.Key, req.Value)
+	err = node.propagateWrite(req.Key, object.LatestValue())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to write %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 		return
@@ -95,13 +110,15 @@ func (node *HeadNode) HandleSet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func propagateWrite(addr string, key, value string) error {
-	log.Printf("propagate write to %s for %s=%s", addr, key, value)
+func propagateWrite(addr string, key string, value *store.Value) error {
+	log.Printf("propagate write to %s for %s=%s", addr, key, value.Value)
 	url := fmt.Sprintf("http://%s/propagate", addr)
 
 	propagateReq := PropagateWriteRequest{
-		Key:   key,
-		Value: value,
+		Key:       key,
+		Value:     value.Value,
+		Version:   value.Version,
+		Timestamp: value.Timestamp,
 	}
 
 	data, err := json.Marshal(propagateReq)
@@ -132,7 +149,7 @@ func propagateWrite(addr string, key, value string) error {
 	return nil
 }
 
-func (node *HeadNode) propagateWrite(key, value string) error {
+func (node *HeadNode) propagateWrite(key string, value *store.Value) error {
 	nextId := node.Id + 1
 	nextNode := node.chainTable.Nodes[nextId]
 	return propagateWrite(nextNode.Addr, key, value)

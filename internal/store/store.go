@@ -2,11 +2,13 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
 
+// Value represent a value within the local craq store
 type Value struct {
 	Value     string    `json:"value"`
 	Version   int64     `json:"version"`
@@ -24,6 +26,14 @@ func (o *Object) IsDirty() bool {
 
 func (o *Object) Commit() {
 	o.Values = o.Values[len(o.Values)-1:]
+}
+
+func (o *Object) NextVersion() int64 {
+	return o.Values[len(o.Values)-1].Version + 1
+}
+
+func (o *Object) LatestValue() *Value {
+	return &o.Values[len(o.Values)-1]
 }
 
 func (o *Object) String() string {
@@ -61,11 +71,7 @@ func New(walDir string) (*Store, error) {
 }
 
 // Set stores a value for a given key
-func (s *Store) Set(key, value string) (*Object, error) {
-	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
-	}
-
+func (s *Store) Set(key, value string, version int64) (*Object, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -76,12 +82,6 @@ func (s *Store) Set(key, value string) (*Object, error) {
 	}
 
 	object := s.data[key]
-	var version int64
-	if len(object.Values) == 0 {
-		version = 0
-	} else {
-		version = object.Values[len(object.Values)-1].Version + 1
-	}
 
 	// Create new value
 	newValue := Value{
@@ -110,25 +110,31 @@ func (s *Store) Set(key, value string) (*Object, error) {
 	return object, nil
 }
 
+// Exists returns true if the object exists
+func (s *Store) Exists(key string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, exists := s.data[key]
+	return exists
+}
+
+var ErrObjectNonExists error = errors.New("object doesn't exist")
+
 // Get retrieves a value for a given key
 func (s *Store) Get(key string) (*Object, error) {
-	if key == "" {
-		return nil, fmt.Errorf("key cannot be empty")
-	}
-
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	object, exists := s.data[key]
 	if !exists {
-		return nil, fmt.Errorf("key not found: %s", key)
+		return nil, ErrObjectNonExists
 	}
-
-	fmt.Println(object)
 
 	return object, nil
 }
 
+// TODO: this is slow operation, improve
 func (s *Store) GetByVersion(key string, version int64) (*Value, error) {
 	if key == "" {
 		return nil, fmt.Errorf("key cannot be empty")

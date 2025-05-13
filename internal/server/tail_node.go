@@ -44,12 +44,12 @@ func (node *TailNode) HandlePropagateWrite(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	object, err := node.store.Set(req.Key, req.Value)
+	object, err := node.store.Set(req.Key, req.Value, req.Version)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to set %s=%s", req.Key, req.Value), http.StatusInternalServerError)
 	}
 
-	log.Printf("commit write %s=%s", req.Key, req.Value)
+	log.Printf("commit write %s=%s (v=%d)", req.Key, req.Value, req.Version)
 	err = node.commitWrite(object)
 	if err != nil {
 		http.Error(w, "failed to commit write", http.StatusInternalServerError)
